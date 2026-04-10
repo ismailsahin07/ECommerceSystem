@@ -13,10 +13,25 @@ services:
       - "10001:10001"
       - "10002:10002"
 
+  sqledge:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=StrongEmulatorPassword123!
+    ports:
+      - "1433:1433"
+
   servicebus-emulator:
     image: mcr.microsoft.com/azure-messaging/servicebus-emulator:latest
     ports:
       - "5672:5672" # AMQP port
     environment:
       - ACCEPT_EULA=Y
+      - SQL_SERVER=sqledge
       - CONFIG_PATH=/ServiceBus_Emulator/ConfigFiles/Config.json
+      - MSSQL_SA_PASSWORD=StrongEmulatorPassword123!
+    depends_on:
+      - sqledge
+    volumes:
+      # This maps your local Config.json into the container
+      - ./Config.json:/ServiceBus_Emulator/ConfigFiles/Config.json
