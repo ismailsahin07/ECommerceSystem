@@ -1,13 +1,36 @@
-using Microsoft.Azure.Functions.Worker.Builder;
+using Azure.Storage.Blobs;
+using Microsoft.Azure.Cosmos;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
-var builder = FunctionsApplication.CreateBuilder(args);
+var host = new HostBuilder()
+    .ConfigureFunctionsWebApplication()
+    .ConfigureServices((context, services) =>
+    {
+        //services.AddApplicationInsightsTelemetryWorkerService();
+        //services.ConfigureFunctionsApplicationInsights();
 
-builder.ConfigureFunctionsWebApplication();
+        string cosmosConn = context.Configuration["CosmosDbConnection"]!;
+        services.AddSingleton(s =>
+        {
+            var options = new CosmosClientOptions
+            {
+                HttpClientFactory = () =>
+                {
+                    HttpMessageHandler httpMessageHandler = new HttpClientHandler
+                    {
+                        ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+                    };
+                    return new HttpClient(httpMessageHandler);
+                },
+                ConnectionMode = ConnectionMode.Gateway
+            };
+            return new CosmosClient(cosmosConn, options);
+        });
 
-// Application Insights isn't enabled by default. See https://aka.ms/AAt8mw4.
-// builder.Services
-//     .AddApplicationInsightsTelemetryWorkerService()
-//     .ConfigureFunctionsApplicationInsights();
+        string storageConn = context.Configuration["AzureWebJobsStorage"]!;
+        services.AddSingleton(x => new BlobServiceClient(storageConn));
+    })
+    .Build();
 
-builder.Build().Run();
+host.Run();
