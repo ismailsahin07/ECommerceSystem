@@ -1,43 +1,40 @@
-﻿using Azure.Storage.Blobs;
-using ECommerce.Shared;
-using Microsoft.Azure.Cosmos;
+﻿using ECommerce.Shared;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
 namespace ECommerce.Processor
 {
+    public class OrderProcessorOutputs
+    {
+        [CosmosDBOutput(databaseName: "ECommerceDb", containerName: "Orders", Connection = "CosmosDbConnection")]
+        public object CosmosDocument { get; set; }
+
+        [BlobOutput("receipts/receipt-{OrderId}.txt", Connection = "BlobStorageConnection")]
+        public string ReceiptContent { get; set; }
+    }
+
     public class OrderProcessorFunction
     {
         private readonly ILogger<OrderProcessorFunction> _logger;
-        private readonly CosmosClient _cosmosClient;
-        private readonly BlobServiceClient _blobServiceClient;
 
-        private const string DatabaseName = "ECommerceDb";
-        private const string ContainerName = "Orders";
-        private const string BlobContainerName = "receipts";
-
-        public OrderProcessorFunction(ILogger<OrderProcessorFunction> logger, CosmosClient cosmosClient, BlobServiceClient blobServiceClient)
+        public OrderProcessorFunction(ILogger<OrderProcessorFunction> logger)
         {
             _logger = logger;
-            _cosmosClient = cosmosClient;
-            _blobServiceClient = blobServiceClient;
         }
 
         [Function(nameof(OrderProcessorFunction))]
-        public async Task Run([ServiceBusTrigger("orders-queue", Connection = "ServiceBusConnection")] string myQueueItem) 
+        public OrderProcessorOutputs Run(
+            [ServiceBusTrigger("orders-queue", Connection = "ServiceBusConnection")] string myQueueItem)
         {
-            _logger.LogInformation("Processing new order message from Service Bus.");
+            _logger.LogInformation("Processing new order message.");
 
             var order = JsonSerializer.Deserialize<OrderRequest>(myQueueItem);
-            if (order == null) return;
+            if (order == null) return null;
 
-            Database database = await _cosmosClient.CreateDatabaseIfNotExistsAsync(DatabaseName);
-            Container container = await database.CreateContainerIfNotExistsAsync(ContainerName, "/OrderId");
-
-            var orderDocument = new
+            var document = new
             {
-                id = Guid.NewGuid().ToString(),
+                id = order.OrderId,
                 OrderId = order.OrderId,
                 CustomerEmail = order.CustomerEmail,
                 ProductId = order.ProductId,
@@ -45,23 +42,13 @@ namespace ECommerce.Processor
                 OrderDate = order.OrderDate
             };
 
-            await container.CreateItemAsync(orderDocument, new PartitionKey(order.OrderId));
-            _logger.LogInformation($"Successfully saved order {order.OrderId} to CosmosDb");
+            string receipt = $"--- OFFICIAL RECEIPT ---\nOrder ID: {order.OrderId}\nStatus: Paid";
 
-            BlobContainerClient blobContainerClient = _blobServiceClient.GetBlobContainerClient(BlobContainerName);
-            await blobContainerClient.CreateIfNotExistsAsync();
-
-            string receiptContent = $"--- OFFICIAL RECEIPT ---" +
-                $"\nOrder ID: {order.OrderId}" +
-                $"\nOrder Date: {order.OrderDate}" +
-                $"\nProduct ID: {order.ProductId}" +
-                $"\nQuantity: {order.Quantity}" +
-                $"\nStatus: Paid and Processing...";
-
-            BlobClient blobClient = blobContainerClient.GetBlobClient($"receipt-{order.OrderId}.txt");
-
-            await blobClient.UploadAsync(BinaryData.FromString(receiptContent), overwrite: true);
-            _logger.LogInformation($"Successfully uploaded receipt for order {order.OrderId} to Blob Storage");
+            return new OrderProcessorOutputs
+            {
+                CosmosDocument = document,
+                ReceiptContent = receipt
+            };
         }
     }
 }

@@ -7,9 +7,6 @@ var host = new HostBuilder()
     .ConfigureFunctionsWebApplication()
     .ConfigureServices((context, services) =>
     {
-        //services.AddApplicationInsightsTelemetryWorkerService();
-        //services.ConfigureFunctionsApplicationInsights();
-
         string cosmosConn = context.Configuration["CosmosDbConnection"]!;
         services.AddSingleton(s =>
         {
