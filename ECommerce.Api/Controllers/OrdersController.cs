@@ -1,5 +1,6 @@
 ﻿using Azure.Messaging.ServiceBus;
 using ECommerce.Shared;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
 
@@ -7,6 +8,7 @@ namespace ECommerce.Api.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize]
     public class OrdersController : ControllerBase
     {
         private readonly ServiceBusClient _serviceBusClient;

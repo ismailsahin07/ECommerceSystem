@@ -24,8 +24,7 @@ namespace ECommerce.Processor
         }
 
         [Function(nameof(OrderProcessorFunction))]
-        public OrderProcessorOutputs Run(
-            [ServiceBusTrigger("orders-queue", Connection = "ServiceBusConnection")] string myQueueItem)
+        public OrderProcessorOutputs Run([ServiceBusTrigger("orders-queue", Connection = "ServiceBusConnection")] string myQueueItem)
         {
             _logger.LogInformation("Processing new order message.");
 
