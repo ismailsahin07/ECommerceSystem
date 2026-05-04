@@ -1,4 +1,5 @@
-﻿using ECommerce.Shared;
+﻿using Azure.Messaging;
+using ECommerce.Shared;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
@@ -12,6 +13,16 @@ namespace ECommerce.Processor
 
         [BlobOutput("receipts/receipt-{OrderId}.txt", Connection = "BlobStorageConnection")]
         public string ReceiptContent { get; set; }
+
+        [EventGridOutput(TopicEndpointUri = "EventGridEndpoint", TopicKeySetting = "EventGridKey")]
+        public CloudEvent PublishEvent { get; set; }
+    }
+
+    public class OrderProcessorData
+    {
+        public string OrderId { get; set; }
+        public string CustomerEmail { get; set; }
+        public string ReceiptUri { get; set; }
     }
 
     public class OrderProcessorFunction
@@ -41,12 +52,30 @@ namespace ECommerce.Processor
                 OrderDate = order.OrderDate
             };
 
+            var eventData = new OrderProcessorData
+            {
+                OrderId = order.OrderId,
+                CustomerEmail = order.CustomerEmail,
+                ReceiptUri = $"https://yourstorage.blob.core.windows.net/receipts/receipt-{order.OrderId}.txt"
+            };
+
+            var cloudEvent = new CloudEvent(
+                source: "ECommerce.Processor.OrderProcessorFunction",
+                type: "Contoso.ECommerce.Processor",
+                jsonSerializableData: eventData
+            )
+            {
+                Subject = $"orders/processed/customers/{order.CustomerEmail}",
+                DataContentType = "application/json"
+            };
+
             string receipt = $"--- OFFICIAL RECEIPT ---\nOrder ID: {order.OrderId}\nStatus: Paid";
 
             return new OrderProcessorOutputs
             {
                 CosmosDocument = document,
-                ReceiptContent = receipt
+                ReceiptContent = receipt,
+                PublishEvent = cloudEvent
             };
         }
     }
